@@ -42,12 +42,9 @@
 #define sampleFreq                  200.0f     			    // 200 hz sample rate!   
 #define limmit_I                    300.0f     
 
-#define gx_diff 		-198
-#define gy_diff 		-96
-#define gz_diff 		-63
-
-#define start_pitch		1.9f
-#define start_roll		0.4f
+#define gx_diff 		4228
+#define gy_diff 		53
+#define gz_diff 		24
 
 #define Kp_yaw      7.59f
 #define Ki_yaw      0.1f
@@ -67,9 +64,6 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc;
-DMA_HandleTypeDef hdma_adc;
-
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim3;
@@ -99,7 +93,7 @@ uint16_t watchdog  = 0;
 
 uint8_t     index =0 ;
 uint8_t    	rx_buffer[24]={0} ;
-int16_t     ch1=0,ch2=0,ch3=15,ch4=0;                 
+int16_t     ch1=0,ch2=0,ch3=0,ch4=0;                 
 int16_t     AccelGyro[6]={0};       // RAW states value
 int16_t     motor_A=0, motor_B=0, motor_C=0, motor_D=0 ;// Motors output value 
 
@@ -109,8 +103,6 @@ float a, b, c;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
-static void MX_ADC_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM14_Init(void);
@@ -133,6 +125,7 @@ volatile void Drive_motor_output(void);
 volatile void Interrupt_call(void);
 volatile void ahrs(void);
 float Smooth_filter(float alfa, float new_data, float prev_data);
+void UART_Callback(void);
 
 /* USER CODE END PFP */
 
@@ -157,8 +150,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_ADC_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
   MX_TIM14_Init();
@@ -169,13 +160,13 @@ int main(void)
 
 	Initial_MPU6050();
 	
-	HAL_TIM_Base_Start_IT(&htim17);
-	
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_4);
 	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1);
 	
+	HAL_TIM_Base_Start_IT(&htim17);
+		
 	HAL_Delay(1000);
 	HAL_UART_Receive_IT(&huart1, (uint8_t *)(rx_buffer + index), 1);
 		
@@ -203,11 +194,9 @@ void SystemClock_Config(void)
   RCC_ClkInitTypeDef RCC_ClkInitStruct;
   RCC_PeriphCLKInitTypeDef PeriphClkInit;
 
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSI14;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSI14State = RCC_HSI14_ON;
   RCC_OscInitStruct.HSICalibrationValue = 16;
-  RCC_OscInitStruct.HSI14CalibrationValue = 16;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
@@ -231,38 +220,6 @@ void SystemClock_Config(void)
 
   /* SysTick_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
-}
-
-/* ADC init function */
-void MX_ADC_Init(void)
-{
-
-  ADC_ChannelConfTypeDef sConfig;
-
-    /**Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion) 
-    */
-  hadc.Instance = ADC1;
-  hadc.Init.ClockPrescaler = ADC_CLOCK_ASYNC;
-  hadc.Init.Resolution = ADC_RESOLUTION12b;
-  hadc.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc.Init.ScanConvMode = ADC_SCAN_DIRECTION_FORWARD;
-  hadc.Init.EOCSelection = EOC_SINGLE_CONV;
-  hadc.Init.LowPowerAutoWait = DISABLE;
-  hadc.Init.LowPowerAutoPowerOff = DISABLE;
-  hadc.Init.ContinuousConvMode = ENABLE;
-  hadc.Init.DiscontinuousConvMode = DISABLE;
-  hadc.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc.Init.DMAContinuousRequests = ENABLE;
-  hadc.Init.Overrun = OVR_DATA_PRESERVED;
-  HAL_ADC_Init(&hadc);
-
-    /**Configure for the selected ADC regular channel to be converted. 
-    */
-  sConfig.Channel = ADC_CHANNEL_5;
-  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
-  sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
-  HAL_ADC_ConfigChannel(&hadc, &sConfig);
-
 }
 
 /* I2C1 init function */
@@ -368,20 +325,6 @@ void MX_USART1_UART_Init(void)
   huart1.Init.OneBitSampling = UART_ONEBIT_SAMPLING_DISABLED ;
   huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
   HAL_UART_Init(&huart1);
-
-}
-
-/** 
-  * Enable DMA controller clock
-  */
-void MX_DMA_Init(void) 
-{
-  /* DMA controller clock enable */
-  __DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
@@ -500,11 +443,11 @@ volatile void PID_controller(void)
 	float Buf_D_Errer_pitch =Errer_pitch;
 	float Buf_D_Error_roll  =Error_roll; 
      
-	T_center    = (float)ch3 *   16;
+	T_center    = (float)ch3 *   20.0f;
 
-	Error_yaw 	= (float)ch4 * 0.05f - q_yaw	;
-	Errer_pitch = (float)ch2 * 0.05f - q_pitch	;
-	Error_roll 	= (float)ch1 * 0.05f - q_roll	;
+	Error_yaw 	= (float)ch4 * 0.15f - q_yaw	;
+	Errer_pitch = (float)ch2 * 0.15f - q_pitch	;
+	Error_roll 	= (float)ch1 * 0.15f - q_roll	;
 	
 	
 //	Sum_Error_yaw 	+= Error_yaw   /sampleFreq ;
@@ -524,8 +467,8 @@ volatile void PID_controller(void)
 	D_Error_roll = (Error_roll-Buf_D_Error_roll)  *sampleFreq ;
 
 
-	Del_yaw		= (Kp_yaw   * Error_yaw)		+ (Ki_yaw	* Sum_Error_yaw)       + (Kd_yaw * D_Error_yaw) ;
-	Del_pitch	= (Kp_pitch * Errer_pitch)	    + (Ki_pitch	* Sum_Error_pitch)     + (Kd_pitch * D_Error_pitch) ;
+	Del_yaw		= (Kp_yaw   * Error_yaw)		+ (Ki_yaw	* Sum_Error_yaw)       	 + (Kd_yaw * D_Error_yaw) ;
+	Del_pitch	= (Kp_pitch * Errer_pitch)	+ (Ki_pitch	* Sum_Error_pitch)     + (Kd_pitch * D_Error_pitch) ;
 	Del_roll	= (Kp_roll  * Error_roll)		+ (Ki_roll	* Sum_Error_roll)      + (Kd_roll * D_Error_roll) ;
 
 
@@ -564,6 +507,7 @@ volatile void Interrupt_call(void)
 	
 		/* Controller */
 		PID_controller();
+	
     if (watchdog > 0) watchdog --;
 	
 		if((ch3 < 5) || (watchdog == 0))
@@ -672,11 +616,11 @@ float Smooth_filter(float alfa, float new_data, float prev_data)
   return output;
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+void UART_Callback(void)
 {
 	if (rx_buffer[index] == 0xFE && index >= 4)
 	{
-		watchdog = 400;
+		watchdog = 200;
 		ch1 = (int8_t)rx_buffer[index - 4];
 		ch2 = (int8_t)rx_buffer[index - 3];
 		ch3 = (int8_t)rx_buffer[index - 2];
@@ -692,7 +636,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   }
   
   /* Start another reception: provide the buffer pointer with offset and the buffer size */
-  HAL_UART_Receive_IT(huart, (uint8_t *)(rx_buffer + index), 1);
+  HAL_UART_Receive_IT(&huart1, (uint8_t *)(rx_buffer + index), 1);
 }
 /* USER CODE END 4 */
 
