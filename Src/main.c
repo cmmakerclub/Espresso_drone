@@ -92,7 +92,7 @@ uint16_t watchdog  = 0;
 /* USER CODE for SPPM Receiver  */
 
 uint8_t     index =0 ;
-uint8_t    	rx_buffer[24]={0} ;
+uint8_t    	rx_buffer[12]={0} ;
 int16_t     ch1=0,ch2=0,ch3=0,ch4=0;                 
 int16_t     AccelGyro[6]={0};       // RAW states value
 int16_t     motor_A=0, motor_B=0, motor_C=0, motor_D=0 ;// Motors output value 
@@ -630,10 +630,8 @@ void UART_Callback(void)
 
   index++;
   /* To avoid buffer overflow */
-  if(index == 24)                                                                                                                                                                                                                                                                                                                                                     
-  {
-    index = 0;
-  }
+  if(index == 12) index = 0;
+
   
   /* Start another reception: provide the buffer pointer with offset and the buffer size */
   HAL_UART_Receive_IT(&huart1, (uint8_t *)(rx_buffer + index), 1);
