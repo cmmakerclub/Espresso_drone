@@ -42,9 +42,9 @@
 #define sampleFreq                  200.0f     			    // 200 hz sample rate!   
 #define limmit_I                    300.0f     
 
-#define gx_diff 		4228
-#define gy_diff 		53
-#define gz_diff 		24
+#define gx_diff 		-405
+#define gy_diff 		-25
+#define gz_diff 		-79
 
 #define Kp_yaw      7.59f
 #define Ki_yaw      0.1f
@@ -539,9 +539,9 @@ volatile void ahrs(void)
 	float gy =((AccelGyro[4]-gy_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	float gz =((AccelGyro[5]-gz_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	
-//	a = Smooth_filter(0.001f, AccelGyro[3], a);
-//	b = Smooth_filter(0.001f, AccelGyro[4], b);
-//	c = Smooth_filter(0.001f, AccelGyro[5], c);
+	a = Smooth_filter(0.001f, AccelGyro[3], a);
+	b = Smooth_filter(0.001f, AccelGyro[4], b);
+	c = Smooth_filter(0.001f, AccelGyro[5], c);
 	
 	
 	float q1_dot = 0.5 * (-q2 * gx - q3 * gy - q4 * gz);
