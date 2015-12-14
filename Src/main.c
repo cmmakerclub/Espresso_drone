@@ -42,21 +42,24 @@
 #define sampleFreq                  200.0f     			    // 200 hz sample rate!   
 #define limmit_I                    300.0f     
 
-#define gx_diff 		-405
-#define gy_diff 		-25
-#define gz_diff 		-79
+#define roll_offset    0.9f     
+#define pitch_offset   -2.7f  
 
-#define Kp_yaw      7.59f
-#define Ki_yaw      0.1f
-#define Kd_yaw      1.6f
+#define gx_diff 		-423
+#define gy_diff 		-24
+#define gz_diff 		-63
 
-#define Kp_pitch		2.65f
-#define Ki_pitch    0.1f
-#define Kd_pitch    1.24f
+#define Kp_yaw      60.0f
+#define Ki_yaw      0.0f
+#define Kd_yaw      0.0f
 
-#define Kp_roll	    2.65f
-#define Ki_roll  		0.1f
-#define Kd_roll  		0.99f
+//#define Kp_pitch		120.0f
+#define Ki_pitch    0.0f
+//#define Kd_pitch    80.0f
+
+//#define Kp_roll	    Kp_pitch
+#define Ki_roll  		0.0f
+//#define Kd_roll  		Kd_pitch
 
 #include "MPU6050.h"
 #include <math.h>
@@ -75,6 +78,10 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
+float Kp_pitch		= 130.0f;
+
+float Kd_pitch    = 30.0f;
+
 float Ref_yaw=0, Ref_pitch=0, Ref_roll=0 ;
 float q_yaw, q_pitch, q_roll;                                            // States value
 float q1=0, q2=0, q3=0, q4=1 ;
@@ -86,6 +93,9 @@ float Del_yaw=0, Del_pitch=0, Del_roll=0;												// Delta states value for r
 float t_compensate = 0;
 float T_center_minus = 0;
 float y_roll=0, y_pitch=0, y0_roll=0, y0_pitch=0 ; 
+float D_Error_pitch_f ;
+float D_Error_roll_f ;
+
 
 uint16_t watchdog  = 0;
 
@@ -127,6 +137,8 @@ volatile void ahrs(void);
 float Smooth_filter(float alfa, float new_data, float prev_data);
 void UART_Callback(void);
 
+float Butterworth_filter1(float x_data1);
+float Butterworth_filter2(float x_data);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
@@ -352,14 +364,14 @@ void Initial_MPU6050(void)
 		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_DEVICE_RESET_BIT, ENABLE);
 		HAL_Delay(100);
 			//	  SetClockSource(MPU6050_CLOCK_PLL_XGYRO)
-		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH, MPU6050_CLOCK_PLL_XGYRO);	
-//			//    SetFullScaleGyroRange(MPU6050_GYRO_FS_250)
-//		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, MPU6050_GYRO_FS_250);
-//			//    SetFullScaleAccelRange(MPU6050_ACCEL_FS_2)
-//		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, MPU6050_ACCEL_FS_2);
-//			//    interupt(Enable)
-//		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_INT_ENABLE, MPU6050_INTERRUPT_DATA_RDY_BIT, ENABLE);
-//		 //    SetSleepModeStatus(DISABLE)
+		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH, MPU6050_CLOCK_PLL_ZGYRO);	
+			//    SetFullScaleGyroRange(MPU6050_GYRO_FS_250)
+		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, MPU6050_GYRO_FS_250);
+			//    SetFullScaleAccelRange(MPU6050_ACCEL_FS_2)
+		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, MPU6050_ACCEL_FS_2);
+			//    interupt(Enable)
+		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_INT_ENABLE, MPU6050_INTERRUPT_DATA_RDY_BIT, ENABLE);
+		 //    SetSleepModeStatus(DISABLE)
 //		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_SLEEP_BIT, DISABLE);
 //		//			SetDLPF(MPU6050_DLPF_BW_5)
 		
@@ -372,6 +384,8 @@ void Initial_MPU6050(void)
 		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_SLEEP_BIT, DISABLE);
 			
 		HAL_Delay(10); // for stability
+		
+		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_CONFIG, MPU6050_CFG_DLPF_CFG_BIT, MPU6050_CFG_DLPF_CFG_LENGTH, MPU6050_DLPF_BW_42);
 }
 
 void MPU6050_WriteBits(uint8_t slaveAddr, uint8_t regAddr, uint8_t bitStart, uint8_t length, uint8_t data)
@@ -438,16 +452,19 @@ void MPU6050_GetRawAccelGyro(int16_t* AccelGyro)
 
 volatile void PID_controller(void)
 {
-
+	static float T_center_buffer;
   float Buf_D_Error_yaw   =Error_yaw;
 	float Buf_D_Errer_pitch =Errer_pitch;
 	float Buf_D_Error_roll  =Error_roll; 
      
-	T_center    = (float)ch3 *   20.0f;
-
-	Error_yaw 	= (float)ch4 * 0.15f - q_yaw	;
-	Errer_pitch = (float)ch2 * 0.15f - q_pitch	;
-	Error_roll 	= (float)ch1 * 0.15f - q_roll	;
+	T_center_buffer    = (float)ch3 *   18.0f;
+	
+	T_center = Smooth_filter(0.08f, T_center_buffer, T_center);
+	
+	//Error_yaw 	= (float)ch4 * 3.0f - q_yaw;
+	Error_yaw 	= - q_yaw;
+	Errer_pitch = (float)ch2 * -0.30f - (q_pitch - pitch_offset)	;
+	Error_roll 	= (float)ch1 * 0.30f - (q_roll - roll_offset)	;
 	
 	
 //	Sum_Error_yaw 	+= Error_yaw   /sampleFreq ;
@@ -464,13 +481,19 @@ volatile void PID_controller(void)
 	
 	D_Error_yaw =  (Error_yaw-Buf_D_Error_yaw)    *sampleFreq ;
 	D_Error_pitch =(Errer_pitch-Buf_D_Errer_pitch)*sampleFreq ;
-	D_Error_roll = (Error_roll-Buf_D_Error_roll)  *sampleFreq ;
+	D_Error_roll = Butterworth_filter2(Error_roll-Buf_D_Error_roll)  *sampleFreq ;
 
+	
+	D_Error_pitch_f = Smooth_filter(0.8f, D_Error_pitch, D_Error_pitch_f);
+	D_Error_roll_f = Smooth_filter(0.8f, D_Error_roll, D_Error_roll_f); 
+
+//	Del_yaw		= (Kp_yaw   * Error_yaw)		+ (Ki_yaw	* Sum_Error_yaw)       	 + (Kd_yaw * D_Error_yaw) ;
+//	Del_pitch	= (Kp_pitch * Errer_pitch)	+ (Ki_pitch	* Sum_Error_pitch)     + (Kd_pitch * D_Error_pitch) ;
+//	Del_roll	= (Kp_roll  * Error_roll)		+ (Ki_roll	* Sum_Error_roll)      + (Kd_roll * D_Error_roll) ;
 
 	Del_yaw		= (Kp_yaw   * Error_yaw)		+ (Ki_yaw	* Sum_Error_yaw)       	 + (Kd_yaw * D_Error_yaw) ;
 	Del_pitch	= (Kp_pitch * Errer_pitch)	+ (Ki_pitch	* Sum_Error_pitch)     + (Kd_pitch * D_Error_pitch) ;
-	Del_roll	= (Kp_roll  * Error_roll)		+ (Ki_roll	* Sum_Error_roll)      + (Kd_roll * D_Error_roll) ;
-
+	Del_roll	= (Kp_pitch  * Error_roll)		+ (Ki_pitch	* Sum_Error_roll)      + (Kd_pitch * D_Error_roll) ;
 
 	motor_A = T_center +Del_pitch	-Del_roll -Del_yaw ;
 	motor_B = T_center +Del_pitch	+Del_roll +Del_yaw ;
@@ -487,7 +510,8 @@ volatile void PID_controller(void)
 	if(motor_B > 2399) motor_B = 2399 ;
 	if(motor_C > 2399) motor_C = 2399 ;
 	if(motor_D > 2399) motor_D = 2399 ;
-    
+	
+    Kd_pitch = Kd_pitch + (float)ch4*0.001f;
 }
 
 volatile void Drive_motor_output(void)
@@ -510,7 +534,7 @@ volatile void Interrupt_call(void)
 	
     if (watchdog > 0) watchdog --;
 	
-		if((ch3 < 5) || (watchdog == 0))
+		if((T_center < 50) || (watchdog == 0))		
 		{
             
 //			Sum_Error_yaw=0;
@@ -521,7 +545,6 @@ volatile void Interrupt_call(void)
 			motor_B=0;
 			motor_C=0;
 			motor_D=0;
-			T_center=0;
 		}
         
 		Drive_motor_output();
@@ -539,9 +562,9 @@ volatile void ahrs(void)
 	float gy =((AccelGyro[4]-gy_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	float gz =((AccelGyro[5]-gz_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	
-	a = Smooth_filter(0.001f, AccelGyro[3], a);
-	b = Smooth_filter(0.001f, AccelGyro[4], b);
-	c = Smooth_filter(0.001f, AccelGyro[5], c);
+//	a = Smooth_filter(0.001f, AccelGyro[3], a);
+//	b = Smooth_filter(0.001f, AccelGyro[4], b);
+//	c = Smooth_filter(0.001f, AccelGyro[5], c);
 	
 	
 	float q1_dot = 0.5 * (-q2 * gx - q3 * gy - q4 * gz);
@@ -606,7 +629,7 @@ volatile void ahrs(void)
 	q_roll = atan2f (y_pitch,x)* -180.0f / M_PI;
 	y_roll = 2*(q2*q4 - q1*q3)	;
 	q_pitch = asinf(y_roll)* -180.0f / M_PI;
-	q_yaw = gz;
+	q_yaw = gz* -180.0f / M_PI;
 	
 }
 
@@ -620,7 +643,7 @@ void UART_Callback(void)
 {
 	if (rx_buffer[index] == 0xFE && index >= 4)
 	{
-		watchdog = 200;
+		watchdog = 50;
 		ch1 = (int8_t)rx_buffer[index - 4];
 		ch2 = (int8_t)rx_buffer[index - 3];
 		ch3 = (int8_t)rx_buffer[index - 2];
@@ -635,6 +658,40 @@ void UART_Callback(void)
   
   /* Start another reception: provide the buffer pointer with offset and the buffer size */
   HAL_UART_Receive_IT(&huart1, (uint8_t *)(rx_buffer + index), 1);
+}
+
+float Butterworth_filter1(float x_data1)
+{
+	static float x_prev_11, x_prev_21, y_data1, y_prev_11, y_prev_21;
+	// lowpass filter butterworth order 2nd fc 20 hz sampling 200hz
+	
+	x_prev_21 = x_prev_11;
+	x_prev_11 = x_data1 ;
+	
+	y_prev_21 = y_prev_11;
+	y_prev_11 = y_data1 ;
+	
+	float nume = (x_data1+ 2.0f * x_prev_11 +  x_prev_21);
+	float denom = (- 1.1429804563522339f * y_prev_11 +  0.412801593542099f * y_prev_21);
+	y_data1 = 0.067455276846885681f * nume - denom;
+	return y_data1;
+}
+
+float Butterworth_filter2(float x_data)
+{ 
+	static float x_prev_1, x_prev_2, y_data, y_prev_1, y_prev_2;
+	// lowpass filter butterworth order 2nd fc 20 hz sampling 200hz
+	
+	x_prev_2 = x_prev_1;
+	x_prev_1 = x_data ;
+	
+	y_prev_2 = y_prev_1;
+	y_prev_1 = y_data ;
+	
+	float nume = (x_data + 2.0f * x_prev_1 +  x_prev_2);
+	float denom = (- 1.1429804563522339f * y_prev_1 +  0.412801593542099f * y_prev_2);
+	y_data = 0.067455276846885681f * nume - denom;
+	return y_data;
 }
 /* USER CODE END 4 */
 
