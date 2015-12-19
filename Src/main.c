@@ -363,6 +363,9 @@ void Initial_MPU6050(void)
 			//    Reset to defalt 
 		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_DEVICE_RESET_BIT, ENABLE);
 		HAL_Delay(100);
+		
+
+		
 			//	  SetClockSource(MPU6050_CLOCK_PLL_XGYRO)
 		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH, MPU6050_CLOCK_PLL_ZGYRO);	
 			//    SetFullScaleGyroRange(MPU6050_GYRO_FS_250)
@@ -371,6 +374,8 @@ void Initial_MPU6050(void)
 		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_GYRO_CONFIG, MPU6050_GCONFIG_FS_SEL_BIT, MPU6050_GCONFIG_FS_SEL_LENGTH, MPU6050_ACCEL_FS_2);
 			//    interupt(Enable)
 		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_INT_ENABLE, MPU6050_INTERRUPT_DATA_RDY_BIT, ENABLE);
+		
+
 		 //    SetSleepModeStatus(DISABLE)
 //		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_SLEEP_BIT, DISABLE);
 //		//			SetDLPF(MPU6050_DLPF_BW_5)
@@ -386,6 +391,9 @@ void Initial_MPU6050(void)
 		HAL_Delay(10); // for stability
 		
 		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_CONFIG, MPU6050_CFG_DLPF_CFG_BIT, MPU6050_CFG_DLPF_CFG_LENGTH, MPU6050_DLPF_BW_42);
+		HAL_Delay(10); // for stability
+		
+	  MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_SMPLRT_DIV, 7, 8, 4);
 }
 
 void MPU6050_WriteBits(uint8_t slaveAddr, uint8_t regAddr, uint8_t bitStart, uint8_t length, uint8_t data)
@@ -461,8 +469,8 @@ volatile void PID_controller(void)
 	
 	T_center = Smooth_filter(0.08f, T_center_buffer, T_center);
 	
-	//Error_yaw 	= (float)ch4 * 3.0f - q_yaw;
-	Error_yaw 	= - q_yaw;
+	Error_yaw 	= (float)ch4 * 3.0f - q_yaw;
+	//Error_yaw 	= - q_yaw;
 	Errer_pitch = (float)ch2 * -0.30f - (q_pitch - pitch_offset)	;
 	Error_roll 	= (float)ch1 * 0.30f - (q_roll - roll_offset)	;
 	
@@ -511,7 +519,6 @@ volatile void PID_controller(void)
 	if(motor_C > 2399) motor_C = 2399 ;
 	if(motor_D > 2399) motor_D = 2399 ;
 	
-    Kd_pitch = Kd_pitch + (float)ch4*0.001f;
 }
 
 volatile void Drive_motor_output(void)
