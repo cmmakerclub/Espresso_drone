@@ -78,9 +78,9 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
-float Kp_pitch		= 130.0f;
+float Kp_pitch		= 20.0f;
 
-float Kd_pitch    = 30.0f;
+float Kd_pitch    = 8.3f;
 
 float Ref_yaw=0, Ref_pitch=0, Ref_roll=0 ;
 float q_yaw, q_pitch, q_roll;                                            // States value
@@ -161,7 +161,7 @@ int main(void)
   SystemClock_Config();
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
+	MX_GPIO_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
   MX_TIM14_Init();
@@ -172,12 +172,14 @@ int main(void)
 
 	Initial_MPU6050();
 	
+	MX_GPIO_Init();
+	
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_4);
 	HAL_TIM_PWM_Start(&htim14,TIM_CHANNEL_1);
 	
-	HAL_TIM_Base_Start_IT(&htim17);
+	HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 		
 	HAL_Delay(1000);
 	HAL_UART_Receive_IT(&huart1, (uint8_t *)(rx_buffer + index), 1);
@@ -350,9 +352,21 @@ void MX_USART1_UART_Init(void)
 void MX_GPIO_Init(void)
 {
 
+  GPIO_InitTypeDef GPIO_InitStruct;
+
   /* GPIO Ports Clock Enable */
   __GPIOA_CLK_ENABLE();
   __GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin : PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
+  //HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 
 }
 
@@ -364,7 +378,7 @@ void Initial_MPU6050(void)
 		MPU6050_WriteBit(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_DEVICE_RESET_BIT, ENABLE);
 		HAL_Delay(100);
 		
-
+	  MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_SMPLRT_DIV, 7, 8, 4);
 		
 			//	  SetClockSource(MPU6050_CLOCK_PLL_XGYRO)
 		MPU6050_WriteBits(MPU6050_DEFAULT_ADDRESS, MPU6050_RA_PWR_MGMT_1, MPU6050_PWR1_CLKSEL_BIT, MPU6050_PWR1_CLKSEL_LENGTH, MPU6050_CLOCK_PLL_ZGYRO);	
@@ -461,7 +475,7 @@ void MPU6050_GetRawAccelGyro(int16_t* AccelGyro)
 volatile void PID_controller(void)
 {
 	static float T_center_buffer;
-  float Buf_D_Error_yaw   =Error_yaw;
+//  float Buf_D_Error_yaw   =Error_yaw;
 	float Buf_D_Errer_pitch =Errer_pitch;
 	float Buf_D_Error_roll  =Error_roll; 
      
@@ -487,13 +501,13 @@ volatile void PID_controller(void)
 //	if(Sum_Error_roll>limmit_I)Sum_Error_roll =limmit_I;
 //	if(Sum_Error_roll<-limmit_I)Sum_Error_roll =-limmit_I;
 	
-	D_Error_yaw =  (Error_yaw-Buf_D_Error_yaw)    *sampleFreq ;
-	D_Error_pitch =(Errer_pitch-Buf_D_Errer_pitch)*sampleFreq ;
-	D_Error_roll = Butterworth_filter2(Error_roll-Buf_D_Error_roll)  *sampleFreq ;
+//	D_Error_yaw =  (Error_yaw-Buf_D_Error_yaw)    *sampleFreq ;
+	D_Error_pitch =(Errer_pitch-Buf_D_Errer_pitch)*sampleFreq;
+	D_Error_roll = (Error_roll-Buf_D_Error_roll)*sampleFreq;
 
 	
-	D_Error_pitch_f = Smooth_filter(0.8f, D_Error_pitch, D_Error_pitch_f);
-	D_Error_roll_f = Smooth_filter(0.8f, D_Error_roll, D_Error_roll_f); 
+//	D_Error_pitch_f = Smooth_filter(0.8f, D_Error_pitch, D_Error_pitch_f);
+//	D_Error_roll_f = Smooth_filter(0.8f, D_Error_roll, D_Error_roll_f); 
 
 //	Del_yaw		= (Kp_yaw   * Error_yaw)		+ (Ki_yaw	* Sum_Error_yaw)       	 + (Kd_yaw * D_Error_yaw) ;
 //	Del_pitch	= (Kp_pitch * Errer_pitch)	+ (Ki_pitch	* Sum_Error_pitch)     + (Kd_pitch * D_Error_pitch) ;
