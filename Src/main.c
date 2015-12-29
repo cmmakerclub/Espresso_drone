@@ -45,17 +45,17 @@
 #define roll_offset    0.9f     
 #define pitch_offset   -2.7f  
 
-#define gx_diff 		-423
-#define gy_diff 		-24
-#define gz_diff 		-63
+#define gx_diff 		-434
+#define gy_diff 		-20
+#define gz_diff 		-18
 
-#define Kp_yaw      60.0f
+#define Kp_yaw      20.0f
 #define Ki_yaw      0.0f
 #define Kd_yaw      0.0f
 
-//#define Kp_pitch		120.0f
+#define Kp_pitch		20.0f
 #define Ki_pitch    0.0f
-//#define Kd_pitch    80.0f
+#define Kd_pitch    9.0f
 
 //#define Kp_roll	    Kp_pitch
 #define Ki_roll  		0.0f
@@ -66,7 +66,7 @@
 
 /* USER CODE END Includes */
 
-/* Private variables ---------------------------------------------------------*/
+/* Private variables ---------------------------------------------------------*/  
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim3;
@@ -78,9 +78,9 @@ UART_HandleTypeDef huart1;
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 
-float Kp_pitch		= 20.0f;
+//float Kp_pitch		= 20.0f;
 
-float Kd_pitch    = 8.3f;
+//float Kd_pitch    = 9.3f ;  //9.0f;
 
 float Ref_yaw=0, Ref_pitch=0, Ref_roll=0 ;
 float q_yaw, q_pitch, q_roll;                                            // States value
@@ -101,7 +101,7 @@ uint16_t watchdog  = 0;
 
 /* USER CODE for SPPM Receiver  */
 
-uint8_t     index =0 ;
+uint8_t     index= 0 ;
 uint8_t    	rx_buffer[12]={0} ;
 int16_t     ch1=0,ch2=0,ch3=0,ch4=0;                 
 int16_t     AccelGyro[6]={0};       // RAW states value
@@ -481,7 +481,7 @@ volatile void PID_controller(void)
      
 	T_center_buffer    = (float)ch3 *   18.0f;
 	
-	T_center = Smooth_filter(0.08f, T_center_buffer, T_center);
+	T_center = Smooth_filter(0.4f, T_center_buffer, T_center);
 	
 	Error_yaw 	= (float)ch4 * 3.0f - q_yaw;
 	//Error_yaw 	= - q_yaw;
@@ -583,9 +583,9 @@ volatile void ahrs(void)
 	float gy =((AccelGyro[4]-gy_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	float gz =((AccelGyro[5]-gz_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	
-//	a = Smooth_filter(0.001f, AccelGyro[3], a);
-//	b = Smooth_filter(0.001f, AccelGyro[4], b);
-//	c = Smooth_filter(0.001f, AccelGyro[5], c);
+	a = Smooth_filter(0.001f, AccelGyro[3], a);
+	b = Smooth_filter(0.001f, AccelGyro[4], b);
+	c = Smooth_filter(0.001f, AccelGyro[5], c);
 	
 	
 	float q1_dot = 0.5 * (-q2 * gx - q3 * gy - q4 * gz);
