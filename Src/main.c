@@ -40,14 +40,19 @@
 #define GYROSCOPE_SENSITIVITY       131.07f  
 #define M_PI                        3.14159265359f	    
 #define sampleFreq                  200.0f     			    // 200 hz sample rate!   
-#define limmit_I                    300.0f     
+#define limmit_I                    3000.0f     
 
-#define roll_offset    0.9f     
-#define pitch_offset   -2.7f  
+#define roll_offset    0//1.41f     
+#define pitch_offset   0//-2.7f  
 
-#define gx_diff 		-434
-#define gy_diff 		-20
-#define gz_diff 		-18
+
+#define gx_diff 		-445
+#define gy_diff 		-9
+#define gz_diff 		-27
+#define ax_diff 		718
+#define ay_diff 		-295
+#define az_diff 		0
+
 
 #define Kp_yaw      20.0f
 #define Ki_yaw      0.0f
@@ -58,7 +63,7 @@
 #define Kd_pitch    9.0f
 
 //#define Kp_roll	    Kp_pitch
-#define Ki_roll  		0.0f
+//#define Ki_roll  		0.0f
 //#define Kd_roll  		Kd_pitch
 
 #include "MPU6050.h"
@@ -107,7 +112,7 @@ int16_t     ch1=0,ch2=0,ch3=0,ch4=0;
 int16_t     AccelGyro[6]={0};       // RAW states value
 int16_t     motor_A=0, motor_B=0, motor_C=0, motor_D=0 ;// Motors output value 
 
-float a, b, c;
+float a, b, c, d, e, f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -479,24 +484,24 @@ volatile void PID_controller(void)
 	float Buf_D_Errer_pitch =Errer_pitch;
 	float Buf_D_Error_roll  =Error_roll; 
      
-	T_center_buffer    = (float)ch3 *   18.0f;
+	T_center_buffer    = (float)ch3 *   20.0f;
 	
 	T_center = Smooth_filter(0.4f, T_center_buffer, T_center);
 	
-	Error_yaw 	= (float)ch4 * 3.0f - q_yaw;
+	Error_yaw 	= (float)ch4 * 2.5f - q_yaw;
 	//Error_yaw 	= - q_yaw;
-	Errer_pitch = (float)ch2 * -0.30f - (q_pitch - pitch_offset)	;
-	Error_roll 	= (float)ch1 * 0.30f - (q_roll - roll_offset)	;
+	Errer_pitch = (float)ch2 * -0.3f - (q_pitch - pitch_offset)	;
+	Error_roll 	= (float)ch1 * 0.3f - (q_roll - roll_offset)	;
 	
 	
 //	Sum_Error_yaw 	+= Error_yaw   /sampleFreq ;
-//	Sum_Error_pitch += Errer_pitch /sampleFreq ;
-//	Sum_Error_roll 	+= Error_roll  /sampleFreq ;
+//	Sum_Error_pitch += Errer_pitch ;//sampleFreq ;
+//	Sum_Error_roll 	+= Error_roll  ;//sampleFreq ;
 //	
 //    // protect 
 //	if(Sum_Error_yaw>limmit_I)Sum_Error_yaw =limmit_I;
 //	if(Sum_Error_yaw<-limmit_I)Sum_Error_yaw =-limmit_I;
-//	if(Sum_Error_pitch>limmit_I)Sum_Error_pitch =limmit_I;
+//	if(Sum_Error_pitch>limmit_I)Sum_Error_pitch =limmit_I; 
 //	if(Sum_Error_pitch<-limmit_I)Sum_Error_pitch =-limmit_I;
 //	if(Sum_Error_roll>limmit_I)Sum_Error_roll =limmit_I;
 //	if(Sum_Error_roll<-limmit_I)Sum_Error_roll =-limmit_I;
@@ -576,17 +581,19 @@ volatile void ahrs(void)
 {
 	// quaternion base process 
 	float Norm;
-	float ax = AccelGyro[0];
-	float ay = AccelGyro[1];
-	float az = AccelGyro[2];
-	float gx =((AccelGyro[3]-gx_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
-	float gy =((AccelGyro[4]-gy_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
-	float gz =((AccelGyro[5]-gz_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
+	float ax = ((float)AccelGyro[0]-ax_diff)/ACCELEROMETER_SENSITIVITY;
+	float ay = ((float)AccelGyro[1]-ay_diff)/ACCELEROMETER_SENSITIVITY;
+	float az = ((float)AccelGyro[2]-az_diff)/ACCELEROMETER_SENSITIVITY;
+	float gx = ((float)(AccelGyro[3]-gx_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
+	float gy = ((float)(AccelGyro[4]-gy_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
+	float gz = ((float)(AccelGyro[5]-gz_diff)/ GYROSCOPE_SENSITIVITY )*M_PI/180 ;
 	
 	a = Smooth_filter(0.001f, AccelGyro[3], a);
 	b = Smooth_filter(0.001f, AccelGyro[4], b);
 	c = Smooth_filter(0.001f, AccelGyro[5], c);
-	
+	d = Smooth_filter(0.001f, AccelGyro[0], d);
+	e = Smooth_filter(0.001f, AccelGyro[1], e);
+	f = Smooth_filter(0.001f, AccelGyro[2], f);
 	
 	float q1_dot = 0.5 * (-q2 * gx - q3 * gy - q4 * gz);
 	float q2_dot = 0.5 * ( q1 * gx + q3 * gz - q4 * gy);
@@ -662,13 +669,23 @@ float Smooth_filter(float alfa, float new_data, float prev_data)
 
 void UART_Callback(void)
 {
-	if (rx_buffer[index] == 0xFE && index >= 4)
+		int8_t _ch1 = (int8_t)rx_buffer[index - 4];
+		int8_t _ch2 = (int8_t)rx_buffer[index - 3];
+		int8_t _ch3 = (int8_t)rx_buffer[index - 2];
+		int8_t _ch4 = (int8_t)rx_buffer[index - 1];
+
+
+	if (rx_buffer[index-5] == 0xFE && index >= 5 && (_ch1+_ch2+_ch3+_ch4) == (int8_t)rx_buffer[index])
 	{
-		watchdog = 50;
-		ch1 = (int8_t)rx_buffer[index - 4];
-		ch2 = (int8_t)rx_buffer[index - 3];
-		ch3 = (int8_t)rx_buffer[index - 2];
-		ch4 = (int8_t)rx_buffer[index - 1];
+		watchdog = 200;
+//		ch1 = (int8_t)rx_buffer[index - 4];
+//		ch2 = (int8_t)rx_buffer[index - 3];
+//		ch3 = (int8_t)rx_buffer[index - 2];
+//		ch4 = (int8_t)rx_buffer[index - 1];
+		ch1 = _ch1;
+		ch2 = _ch2;
+		ch3 = _ch3;
+		ch4 = _ch4;
 		index = 0;
 	}
 
